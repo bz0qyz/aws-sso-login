@@ -1,0 +1,88 @@
+name: Build and Create Release
+on: 
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write
+
+jobs:
+  createrelease:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Create Github Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          body_path: ${{ github.workspace }}/CHANGELOG.md
+          files: |
+            README.md
+          tag_name: ${{ github.ref_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+  build:
+    name: Build packages
+    needs: createrelease
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            TARGET: linux
+            CMD_BUILD: >
+                uname -a &&
+                pyinstaller -F -n aws-sso-login aws-sso-login.py &&
+                cd dist/ &&
+                ls -laR &&
+                file aws-sso-login &&
+                zip -r9 aws-sso-login-linux-amd64.zip aws-sso-login;
+                ls -laR
+            OUT_FILE_NAME: aws-sso-login-linux-amd64.zip
+            ASSET_MIME: application/zip
+          - os: macos-latest
+            TARGET: macos
+            CMD_BUILD: >
+                uname -a &&
+                pyinstaller -F -n aws-sso-login aws-sso-login.py &&
+                cd dist/ &&
+                ls -laR &&
+                file aws-sso-login &&
+                zip -r9 aws-sso-login-macos-amd64.zip aws-sso-login;
+                ls -laR
+            OUT_FILE_NAME: aws-sso-login-macos-amd64.zip
+            ASSET_MIME: application/zip
+          - os: windows-latest
+            TARGET: windows
+            CMD_BUILD: pyinstaller -F -c -n aws-sso-login.exe -i resources/aws-sso-login.ico aws-sso-login.py
+            OUT_FILE_NAME: aws-sso-login.exe
+            ASSET_MIME: application/vnd.microsoft.portable-executable
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v3
+        with:
+          python-version: 3.9
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r build_requirements.txt
+      - name: Build with pyinstaller for ${{matrix.TARGET}}
+        run: ${{matrix.CMD_BUILD}}
+      
+      - name: Upload Release Asset
+        id: upload-release-asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.createrelease.outputs.upload_url }}
+          asset_path: ./dist/${{ matrix.OUT_FILE_NAME}}
+          asset_name: ${{ matrix.OUT_FILE_NAME}}
+          asset_content_type: ${{ matrix.ASSET_MIME}}

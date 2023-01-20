@@ -1,0 +1,5 @@
+.DS_Store
+.idea
+**/aws-sso-login.spec
+**/build
+**/dist
