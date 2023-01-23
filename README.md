@@ -8,6 +8,23 @@ The AWS Login manager simplifies session management for AWS SSO.
 - Optionally authorize docker with AWS credentials for each AWS profile using AWS SSO.
 - Optionally Authorize kubeconfig for EKS with AWS credentials for each AWS profile using AWS SSO.
 
+## [Releases](https://github.com/bz0qyz/aws-sso-login/releases)
+Each release version builds a portable executable for each of the following operaing systems
+1. Linux (AMD64) `aws-sso-login-linux-amd64.zip`
+1. Mac OS (AMD54) `aws-sso-login-macos-amd64.zip` - Tested as working on Apple Silicon/M1.
+1. Windows `aws-sso-login.exe`
+
+### MacOS Release
+Requires:
+- iTerm2 (`.app` version only)
+
+The MacOS release includes both a command-line binary and a `.app` version. The app version can be used as a standard Application when running without any command-line arguments. 
+
+You can use the keyboard shortcut: **Control+Shift+Command+T** in Finder to add the application to the Mac Dock.
+
+### Linux Release
+The Linux release cannot be used with Windows subsystem for Linux. The application needs to spawn a browser session which does not translate from WSL to Windows.
+
 
 ## Usage
 ```
