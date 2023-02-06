@@ -7,12 +7,14 @@ import logging
 import argparse
 import subprocess
 from configparser import ConfigParser
+from lib.ui import QApp, MainWindow
 
 # Global variables
 APP = {
     'name': 'aws-sso-login',
     'description': 'AWS SSO Login Manager',
-    'version': '1.0.6',
+    'version': '1.1.0',
+    'author': 'Russ Cook <bz0qyz@protonmail.com>',
 }
 DEFAULTS = {
     "config": {
@@ -44,35 +46,53 @@ class EnvDefault(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         setattr(namespace, self.dest, values)
 
+ARGUMENTS = {
+    "config": {
+        "config_awscli": {"label": "aws config", "help": "Path to 'aws' config file."},
+        "config_eks": {"label": "eks config", "help": "Path to 'eks_auth' config file."}
+    },
+    "cmd": {
+        "cmd_awscli": {"label": "aws binary", "help": "Path to 'aws' binary."},
+        "cmd_docker": {"label": "docker binary", "help": "Path to 'docker' binary."},
+        "cmd_kubectl": {"label": "kubectl binary", "help": "Path to 'kubectl' binary."}
+    },
+    "options": {
+        "skip_login": {"label": "AWS SSO Login", "help": "Skip login to AWS SSO.", "invert": True, "enabled": True},
+        "skip_eks": {"label": "AWS EKS Auth", "help": "Skip EKS authorization.", "invert": True, "enabled": True},
+        "do_ecr": {"label": "AWS ECR Auth", "help": "Login to AWS ECR. (requires docker)", "invert": False, "enabled": True}
+    }
+}
+
 parser = argparse.ArgumentParser(
     description=f"{APP['description']} v{APP['version']}",
     epilog="NOTE: You cannot run this command in Windows Subsystem for Linux (WSL) as it launches a web browser for login to AWS."
 )
 parser.add_argument('-v','--verbose', action="count", default=False, help='Show verbose output.')
-parser.add_argument('--config-eks', help='Path to eks config file.',
+parser.add_argument('--config-eks', help=f"{ARGUMENTS['config']['config_eks']['help']}",
     metavar=DEFAULTS['config']['eks'], default=DEFAULTS['config']['eks'],
     action=EnvDefault, envvar="CONFIG_EKS"
 )
-parser.add_argument('--cmd-awscli', help='Path to aws binary.',
+parser.add_argument('--cmd-awscli', help=f"{ARGUMENTS['cmd']['cmd_awscli']['help']}",
     metavar=DEFAULTS['cmd']['aws'], default=DEFAULTS['cmd']['aws'],
     action=EnvDefault, envvar="CMD_AWSCLI"
 )
-parser.add_argument('--config-awscli', help='Path to aws config file.',
+parser.add_argument('--config-awscli', help=f"{ARGUMENTS['config']['config_awscli']['help']}",
     metavar=DEFAULTS['config']['aws'], default=DEFAULTS['config']['aws'],
     action=EnvDefault, envvar="CONFIG_AWSCLI"
 )
-parser.add_argument('--cmd-kubectl', help='Path to kubectl binary.',
+parser.add_argument('--cmd-kubectl', help=f"{ARGUMENTS['cmd']['cmd_kubectl']['help']}",
     metavar=DEFAULTS['cmd']['kubectl'], default=DEFAULTS['cmd']['kubectl'],
     action=EnvDefault, envvar="CMD_KUBECTL"
 )
-parser.add_argument('--cmd-docker', help='Path to docker binary.',
+parser.add_argument('--cmd-docker', help=f"{ARGUMENTS['cmd']['cmd_docker']['help']}",
     metavar=DEFAULTS['cmd']['docker'], default=DEFAULTS['cmd']['docker'],
     action=EnvDefault, envvar="CMD_DOCKER"
 )
-parser.add_argument('--skip-login', action="store_true", help='Skip AWS SSO logins.')
-parser.add_argument('--skip-eks', action="store_true", help='Skip EKS logins. EKS logins require kubectl.')
-parser.add_argument('--do-ecr', action="store_true", help='Also login to AWS ECR. (requires local docker)')
+parser.add_argument('--skip-login', action="store_true", help=f"{ARGUMENTS['options']['skip_login']['help']}")
+parser.add_argument('--skip-eks', action="store_true", help=f"{ARGUMENTS['options']['skip_eks']['help']} (requires kubectl)")
+parser.add_argument('--do-ecr', action="store_true", help=f"{ARGUMENTS['options']['do_ecr']['help']}")
 parser.add_argument('--dry-run', action="store_true", help='Dry Run. Show, but no not execute any commands.')
+parser.add_argument('-q','--no-ui', action="store_true", help='Do not show the UI interface.')
 args = parser.parse_args()
 
 # Application Logging
@@ -290,9 +310,11 @@ if __name__ == "__main__":
 
     if not os.path.isfile(args.cmd_kubectl):
         OPS_ENABLED["kubectl"] = False
+        ARGUMENTS["options"]["skip_eks"]["enabled"] = False
         log.warning(f"Kubectl command file: {args.cmd_kubectl}, not found. Kubectl login will be disabled.")
     if not os.path.isfile(args.cmd_docker):
         OPS_ENABLED["docker"] = False
+        ARGUMENTS["options"]["do_ecr"]["enabled"] = False
         log.warning(f"Docker command file: {args.cmd_docker}, not found. Docker ECR login will be disabled.")
 
     # Verify that shell commands are installed 
@@ -358,6 +380,24 @@ if __name__ == "__main__":
                     print("{}: {}".format(attr, value))
             print()
     
+    if not args.no_ui:
+        ui_args = {
+            "app": APP,
+            "ops_enabled": OPS_ENABLED,
+            "aws_profiles": PROFILES,
+            "eks_clusters": KUBES,
+            "options": args,
+            "arguments": ARGUMENTS
+        }
+        app = QApp
+        window = MainWindow(**ui_args)
+        window.show()
+        app.exec()
+
+        if window.canceled:
+            log.info("Login process canceled by user.")
+            sys.exit(1)
+
     
     for name, profile in PROFILES.items():
         
